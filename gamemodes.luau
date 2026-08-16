@@ -114,7 +114,7 @@ Arena3v3.boxOffset = Vec3.new(0, 0, 650)
 Arena3v3.centerBoxOffset = Vec3.new(0, 0, 300)
 Arena3v3.goalBoxSize = Vec3.new(150, 500, 225)
 Arena3v3.goalPositionOffset = Vec3.new(3250, 0, 175)
-Arena3v3.boostPadDefinitions = {}
+Arena3v3.boostPadDefinitions = {} :: { BoostPadDefinition }
 
 function Arena3v3.new(gamemode: ModuleStateSpectatorLuaApi, frameIndex: number): Arena3v3
 	local self: CasterArena = setmetatable(CasterArena.new(gamemode, frameIndex), Arena3v3) :: any
@@ -266,7 +266,7 @@ Arena4v4.boostPadDefinitions = {
 	{ position = Vec3.new(-2450, 0, 417), preset = "small" },
 	{ position = Vec3.new(-2450, 900, 417), preset = "small" },
 	{ position = Vec3.new(-2450, -900, 417), preset = "small" },
-}
+} :: { BoostPadDefinition }
 
 function Arena4v4.new(gamemode: ModuleStateSpectatorLuaApi, frameIndex: number): Arena4v4
 	local self: Arena4v4 = setmetatable(Arena.new(gamemode, frameIndex), Arena4v4) :: any
@@ -401,7 +401,7 @@ Driftblitz.boxOffset = Vec3.new(0, 0, 740)
 Driftblitz.centerBoxOffset = Vec3.new(0, 0, 100)
 Driftblitz.goalBoxSize = Vec3.new(100, 890, 300)
 Driftblitz.goalPositionOffset = Vec3.new(5295, 0, 175)
-Driftblitz.boostPadDefinitions = {}
+Driftblitz.boostPadDefinitions = {} :: { BoostPadDefinition }
 
 function Driftblitz.new(gamemode: ModuleStateSpectatorLuaApi, frameIndex: number): Driftblitz
 	local self: Driftblitz = setmetatable(Arena.new(gamemode, frameIndex), Driftblitz) :: any
@@ -530,7 +530,7 @@ ZDrift.boxOffset = Vec3.new(0, 0, 880)
 ZDrift.centerBoxOffset = Vec3.new(0, 0, 500)
 ZDrift.goalBoxSize = Vec3.new(600, 600, 600)
 ZDrift.goalPositionOffset = Vec3.new(8200, 0, 585)
-ZDrift.boostPadDefinitions = {}
+ZDrift.boostPadDefinitions = {} :: { BoostPadDefinition }
 
 function ZDrift.new(gamemode: ModuleStateSpectatorLuaApi, frameIndex: number): ZDrift
 	local self: ZDrift = setmetatable(Arena.new(gamemode, frameIndex), ZDrift) :: any
@@ -650,7 +650,7 @@ setmetatable(Strike, { __index = CasterArena })
 Strike.boxSize = Vec3.new(2250, 2250, 1150)
 Strike.boxOffset = Vec3.new(0, 0, 415)
 Strike.centerBoxOffset = Vec3.new(0, 0, -40)
-Strike.boostPadDefinitions = {}
+Strike.boostPadDefinitions = {} :: { BoostPadDefinition }
 
 function Strike.new(
 	gamemode: ModuleStateSpectatorLuaApi,

@@ -9,7 +9,7 @@ local Util = require("util")
 local Box = require("box")
 
 local Arena = require("arena")
-type Arena = Arena.Arena
+type Arena<ArenaData = {}, HomeData = {}, AwayData = {}> = Arena.Arena<ArenaData, HomeData, AwayData>
 type ArenaBoostPad = Arena.ArenaBoostPad
 
 export type BoostPadPreset = Arena.BoostPadPreset
@@ -63,7 +63,7 @@ export type PadContact = {
 }
 
 type Boost = {
-	arena: Arena?,
+	arena: Arena<any, any, any>?,
 	debug: boolean,
 
 	playerStates: { [number]: PlayerBoostState },
@@ -79,8 +79,8 @@ type Boost = {
 	buildArenaPads: (transform: Transform, definitions: { BoostPadDefinition }) -> { ArenaBoostPad },
 
 	reset: (self: Boost) -> (),
-	setArena: (self: Boost, arena: Arena) -> (),
-	isTracking: (self: Boost, arena: Arena) -> boolean,
+	setArena: <A, H, W>(self: Boost, arena: Arena<A, H, W>) -> (),
+	isTracking: <A, H, W>(self: Boost, arena: Arena<A, H, W>) -> boolean,
 	refillEveryone: (self: Boost) -> (),
 	getPlayerState: (self: Boost, player: ReplayPlayer) -> PlayerBoostState,
 	getPlayerStats: (self: Boost, player: ReplayPlayer) -> BoostStats,
@@ -91,8 +91,8 @@ type Boost = {
 	collectPad: (self: Boost, player: ReplayPlayer, contact: PadContact) -> (),
 	tick: (self: Boost, dt: number) -> (),
 	gui: (self: Boost) -> (),
-	addPadAtCamera: (self: Boost, arena: Arena, preset: BoostPadPreset) -> string,
-	padEditorGui: (self: Boost, arena: Arena) -> boolean,
+	addPadAtCamera: <A, H, W>(self: Boost, arena: Arena<A, H, W>, preset: BoostPadPreset) -> string,
+	padEditorGui: <A, H, W>(self: Boost, arena: Arena<A, H, W>) -> boolean,
 }
 
 local Boost: Boost = {} :: Boost
@@ -154,13 +154,13 @@ function Boost.buildArenaPads(transform: Transform, definitions: { BoostPadDefin
 	return pads
 end
 
-function Boost:setArena(arena: Arena)
+function Boost:setArena<A, H, W>(arena: Arena<A, H, W>)
 	self.arena = arena
 	self:reset()
 end
 
 -- Only the caster's selected arena is tracked, so arena events from any other arena are ignored
-function Boost:isTracking(arena: Arena): boolean
+function Boost:isTracking<A, H, W>(arena: Arena<A, H, W>): boolean
 	return self.arena == arena
 end
 
@@ -365,7 +365,7 @@ function Boost:gui()
 	end
 end
 
-function Boost:addPadAtCamera(arena: Arena, preset: BoostPadPreset): string
+function Boost:addPadAtCamera<A, H, W>(arena: Arena<A, H, W>, preset: BoostPadPreset): string
 	local localOffset = arena.transform.rotation:inverse():rotateVector(camera.position - arena.transform.position)
 
 	table.insert(arena.boostPadDefinitions, { position = localOffset, preset = preset })
@@ -374,14 +374,14 @@ function Boost:addPadAtCamera(arena: Arena, preset: BoostPadPreset): string
 end
 
 -- Debug only editor for placing boost pads, returns true when the pads of the arena type changed
-function Boost:padEditorGui(arena: Arena): boolean
+function Boost:padEditorGui<A, H, W>(arena: Arena<A, H, W>): boolean
 	local definitions = arena.boostPadDefinitions
 	local changed = false
 
 	Gui.text("Positions are arena relative and shared by every arena of this type")
 
 	if Gui.beginCombo("Preset To Add", self.padEditorPreset) then
-		for _, preset in BOOST_PAD_PRESET_NAMES do
+		for _, preset: "big" | "small" in BOOST_PAD_PRESET_NAMES do
 			if Gui.selectable(preset, self.padEditorPreset == preset) then
 				self.padEditorPreset = preset
 			end
@@ -422,7 +422,7 @@ function Boost:padEditorGui(arena: Arena): boolean
 		Gui.setItemTooltip("Drag to move this boost pad")
 
 		if Gui.beginCombo(`Preset##boostPad{i}`, definition.preset) then
-			for _, preset in BOOST_PAD_PRESET_NAMES do
+			for _, preset: "big" | "small" in BOOST_PAD_PRESET_NAMES do
 				if Gui.selectable(`{preset}##boostPad{i}`, definition.preset == preset) then
 					definition.preset = preset
 					changed = true

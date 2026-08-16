@@ -6,7 +6,7 @@
 local Util = require("util")
 
 local Arena = require("arena")
-type Arena = Arena.Arena
+type Arena<ArenaData = {}, HomeData = {}, AwayData = {}> = Arena.Arena<ArenaData, HomeData, AwayData>
 
 export type PlayerPossessionStats = {
 	name: string,
@@ -15,7 +15,7 @@ export type PlayerPossessionStats = {
 }
 
 type Possession = {
-	arena: Arena?,
+	arena: Arena<any, any, any>?,
 
 	contactDistance: number,
 	possessionTimeout: number,
@@ -34,7 +34,7 @@ type Possession = {
 	statsByPlayer: { [number]: PlayerPossessionStats },
 
 	reset: (self: Possession) -> (),
-	setArena: (self: Possession, arena: Arena) -> (),
+	setArena: <A, H, W>(self: Possession, arena: Arena<A, H, W>) -> (),
 	printResults: (self: Possession) -> (),
 	tick: (self: Possession, dt: number) -> (),
 	gui: (self: Possession) -> (),
@@ -59,7 +59,7 @@ Possession.lastPossessionHolderPosition = nil
 Possession.possessionSeconds = { home = 0, away = 0, loose = 0 }
 Possession.statsByPlayer = {}
 
-function Possession:setArena(arena: Arena)
+function Possession:setArena<A, H, W>(arena: Arena<A, H, W>)
 	self.arena = arena
 	self:reset()
 end
