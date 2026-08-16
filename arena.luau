@@ -12,7 +12,7 @@ export type ArenaBoostPad = {
 	preset: BoostPadPreset,
 }
 
-export type BoostPadDef = {
+export type BoostPadDefinition = {
 	position: Vec3,
 	preset: BoostPadPreset,
 }
@@ -50,7 +50,7 @@ export type Arena<ArenaData = {}, HomeData = {}, AwayData = {}> = {
 	transformOffset: Transform,
 	box: BoxType,
 	centerBox: BoxType,
-	boostPadDefs: { BoostPadDef },
+	boostPadDefinitions: { BoostPadDefinition },
 	boostPads: { ArenaBoostPad },
 	home: ArenaTeam<HomeData>,
 	away: ArenaTeam<AwayData>,

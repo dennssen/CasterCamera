@@ -13,7 +13,7 @@ type Arena = Arena.Arena
 type ArenaBoostPad = Arena.ArenaBoostPad
 
 export type BoostPadPreset = Arena.BoostPadPreset
-export type BoostPadDef = Arena.BoostPadDef
+export type BoostPadDefinition = Arena.BoostPadDefinition
 
 -- 4 seconds to use boost
 -- small boost gives 22.5% boost, big gives 100%
@@ -74,7 +74,9 @@ type Boost = {
 	padEditorMessage: string,
 
 	resolvePadSize: (preset: string) -> Vec3,
-	buildArenaPads: (transform: Transform, defs: { BoostPadDef }) -> { ArenaBoostPad },
+	resolvePadValue: (preset: string) -> number,
+	resolvePadCooldownSeconds: (preset: string) -> number,
+	buildArenaPads: (transform: Transform, definitions: { BoostPadDefinition }) -> { ArenaBoostPad },
 
 	reset: (self: Boost) -> (),
 	setArena: (self: Boost, arena: Arena) -> (),
@@ -82,6 +84,8 @@ type Boost = {
 	refillEveryone: (self: Boost) -> (),
 	getPlayerState: (self: Boost, player: ReplayPlayer) -> PlayerBoostState,
 	getPlayerStats: (self: Boost, player: ReplayPlayer) -> BoostStats,
+	resetPadCooldowns: (self: Boost) -> (),
+	getPadAvailableAt: (self: Boost, padIndex: number) -> number,
 	isPadAvailable: (self: Boost, padIndex: number) -> boolean,
 	getPlayerPadContact: (self: Boost, player: ReplayPlayer, state: PlayerBoostState) -> PadContact?,
 	collectPad: (self: Boost, player: ReplayPlayer, contact: PadContact) -> (),
@@ -113,17 +117,37 @@ function Boost.resolvePadSize(preset: string): Vec3
 	return size
 end
 
-function Boost.buildArenaPads(transform: Transform, defs: { BoostPadDef }): { ArenaBoostPad }
+function Boost.resolvePadValue(preset: string): number
+	local value: number? = BOOST_PAD_VALUES[preset]
+
+	if not value then
+		error(`Invalid boost pad preset name: {preset}`)
+	end
+
+	return value
+end
+
+function Boost.resolvePadCooldownSeconds(preset: string): number
+	local cooldownSeconds: number? = BOOST_PAD_COOLDOWN_SECONDS[preset]
+
+	if not cooldownSeconds then
+		error(`Invalid boost pad preset name: {preset}`)
+	end
+
+	return cooldownSeconds
+end
+
+function Boost.buildArenaPads(transform: Transform, definitions: { BoostPadDefinition }): { ArenaBoostPad }
 	local pads: { ArenaBoostPad } = {}
 
-	for _, def in defs do
+	for _, definition in definitions do
 		table.insert(pads, {
 			box = Box.new(
-				transform.position + transform.rotation:rotateVector(def.position),
-				Boost.resolvePadSize(def.preset),
+				transform.position + transform.rotation:rotateVector(definition.position),
+				Boost.resolvePadSize(definition.preset),
 				transform.rotation
 			),
-			preset = def.preset,
+			preset = definition.preset,
 		})
 	end
 
@@ -143,7 +167,20 @@ end
 function Boost:reset()
 	self.playerStates = {}
 	self.statsByPlayer = {}
+	self:resetPadCooldowns()
+end
+
+function Boost:resetPadCooldowns()
 	self.padAvailableAt = {}
+
+	local arena = self.arena
+	if not arena then
+		return
+	end
+
+	for padIndex in arena.boostPads do
+		self.padAvailableAt[padIndex] = 0
+	end
 end
 
 function Boost:getPlayerState(player: ReplayPlayer): PlayerBoostState
@@ -187,8 +224,18 @@ function Boost:refillEveryone()
 	end
 end
 
+function Boost:getPadAvailableAt(padIndex: number): number
+	local availableAt: number? = self.padAvailableAt[padIndex]
+
+	if not availableAt then
+		error(`No cooldown is tracked for boost pad index: {padIndex}`)
+	end
+
+	return availableAt
+end
+
 function Boost:isPadAvailable(padIndex: number): boolean
-	return os.clock() >= (self.padAvailableAt[padIndex] or 0)
+	return os.clock() >= self:getPadAvailableAt(padIndex)
 end
 
 function Boost:getPlayerPadContact(player: ReplayPlayer, state: PlayerBoostState): PadContact?
@@ -240,7 +287,7 @@ function Boost:collectPad(player: ReplayPlayer, contact: PadContact)
 
 	if not self:isPadAvailable(contact.padIndex) then
 		if self.debug then
-			local secondsLeft = self.padAvailableAt[contact.padIndex] - os.clock()
+			local secondsLeft = self:getPadAvailableAt(contact.padIndex) - os.clock()
 			print(`[Boost] {player.playerName} touched a {preset} boost pad on cooldown ({secondsLeft}s left)`)
 		end
 		return
@@ -255,9 +302,9 @@ function Boost:collectPad(player: ReplayPlayer, contact: PadContact)
 		return
 	end
 
-	local gain = BOOST_PAD_VALUES[preset] or 0
+	local gain = Boost.resolvePadValue(preset)
 	playerStats.boostPercent = math.min(MAX_BOOST_PERCENT, playerStats.boostPercent + gain)
-	self.padAvailableAt[contact.padIndex] = os.clock() + (BOOST_PAD_COOLDOWN_SECONDS[preset] or 0)
+	self.padAvailableAt[contact.padIndex] = os.clock() + Boost.resolvePadCooldownSeconds(preset)
 
 	if self.debug then
 		print(
@@ -321,14 +368,14 @@ end
 function Boost:addPadAtCamera(arena: Arena, preset: BoostPadPreset): string
 	local localOffset = arena.transform.rotation:inverse():rotateVector(camera.position - arena.transform.position)
 
-	table.insert(arena.boostPadDefs, { position = localOffset, preset = preset })
+	table.insert(arena.boostPadDefinitions, { position = localOffset, preset = preset })
 
-	return `Added {preset} boost pad #{#arena.boostPadDefs} to {arena.type}`
+	return `Added {preset} boost pad #{#arena.boostPadDefinitions} to {arena.type}`
 end
 
 -- Debug only editor for placing boost pads, returns true when the pads of the arena type changed
 function Boost:padEditorGui(arena: Arena): boolean
-	local defs = arena.boostPadDefs
+	local definitions = arena.boostPadDefinitions
 	local changed = false
 
 	Gui.text("Positions are arena relative and shared by every arena of this type")
@@ -349,8 +396,8 @@ function Boost:padEditorGui(arena: Arena): boolean
 	Gui.setItemTooltip("Adds a boost pad at your current camera position for this arena type")
 
 	if Gui.button("Print Boost Pads") then
-		for i, def in defs do
-			print(`boostPadDefs[{i}]: {def.preset} at {def.position}`)
+		for i, definition in definitions do
+			print(`boostPadDefinitions[{i}]: {definition.preset} at {definition.position}`)
 		end
 	end
 
@@ -362,22 +409,22 @@ function Boost:padEditorGui(arena: Arena): boolean
 
 	local removeIndex: number? = nil
 
-	for i, def in defs do
+	for i, definition in definitions do
 		if i ~= 1 then
 			Gui.separator()
 		end
 		Gui.text(`Boost Pad #{i}`)
 
-		def.position = Gui.dragFloat3(`Position##boostPad{i}`, def.position, 1, -math.huge, math.huge)
+		definition.position = Gui.dragFloat3(`Position##boostPad{i}`, definition.position, 1, -math.huge, math.huge)
 		if Gui.isItemActive() then
 			changed = true
 		end
 		Gui.setItemTooltip("Drag to move this boost pad")
 
-		if Gui.beginCombo(`Preset##boostPad{i}`, def.preset) then
+		if Gui.beginCombo(`Preset##boostPad{i}`, definition.preset) then
 			for _, preset in BOOST_PAD_PRESET_NAMES do
-				if Gui.selectable(`{preset}##boostPad{i}`, def.preset == preset) then
-					def.preset = preset
+				if Gui.selectable(`{preset}##boostPad{i}`, definition.preset == preset) then
+					definition.preset = preset
 					changed = true
 				end
 			end
@@ -390,7 +437,7 @@ function Boost:padEditorGui(arena: Arena): boolean
 	end
 
 	if removeIndex then
-		table.remove(defs, removeIndex)
+		table.remove(definitions, removeIndex)
 		self.padEditorMessage = `Removed boost pad #{removeIndex}`
 		changed = true
 	end

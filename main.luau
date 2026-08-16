@@ -1871,6 +1871,7 @@ function GUI_CameraDebug()
 			if Gui.treeNode("Selected Arena Boost Pads") then
 				if Boost:padEditorGui(selectedArena) then
 					updateArenaBoostPads()
+					Boost:resetPadCooldowns()
 				end
 				Gui.treePop()
 			end
