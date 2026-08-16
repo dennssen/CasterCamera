@@ -5,6 +5,18 @@ type BoxType = typeof(Box)
 
 local Util = require("util")
 
+export type BoostPadPreset = "small" | "big"
+
+export type ArenaBoostPad = {
+	box: BoxType,
+	preset: BoostPadPreset,
+}
+
+export type BoostPadDefinition = {
+	position: Vec3,
+	preset: BoostPadPreset,
+}
+
 export type ArenaTeam<T = {}> = {
 	teamIndex: number,
 	color: Color?,
@@ -38,6 +50,8 @@ export type Arena<ArenaData = {}, HomeData = {}, AwayData = {}> = {
 	transformOffset: Transform,
 	box: BoxType,
 	centerBox: BoxType,
+	boostPadDefinitions: { BoostPadDefinition },
+	boostPads: { ArenaBoostPad },
 	home: ArenaTeam<HomeData>,
 	away: ArenaTeam<AwayData>,
 	players: { ReplayPlayer },
@@ -82,6 +96,7 @@ export type Arena<ArenaData = {}, HomeData = {}, AwayData = {}> = {
 		awayScore: number
 	) -> (),
 	onGoalScoredHook: (self: Arena<ArenaData, HomeData, AwayData>, scoredTeamIndex: number) -> (),
+	onOvertimeEnteredHook: (self: Arena<ArenaData, HomeData, AwayData>) -> (),
 
 	-- Overrides
 	isPointOnHomeSide: (self: Arena<ArenaData, HomeData, AwayData>, point: Vec3) -> boolean,
@@ -106,6 +121,7 @@ function Arena.new(gamemode: ModuleStateSpectatorLuaApi, frameIndex: number): Ar
 	self.transformOffset = Transform.identity
 	self.transform = gamemode.transform
 	self.players = {}
+	self.boostPads = {}
 
 	self.home = {
 		teamIndex = Util.TeamIndex.HomeTeam,
@@ -246,6 +262,10 @@ function Arena:tick()
 
 	if not isStarting and self.gameTimeSeconds > self.lastGameTimeSeconds and not self.isOvertime then
 		self.isOvertime = true
+
+		if self.onOvertimeEnteredHook then
+			self:onOvertimeEnteredHook()
+		end
 	end
 
 	self.home.previousRoundsWon = self.home.roundsWon

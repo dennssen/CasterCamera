@@ -28,6 +28,7 @@ export type BoxType = {
 	render: (self: BoxType, r: number, g: number, b: number) -> (),
 	renderFaces: (self: BoxType, color: LinearColor) -> (),
 	checkPointIntersect: (self: BoxType, point: Vec3) -> boolean,
+	checkSegmentIntersect: (self: BoxType, pointA: Vec3, pointB: Vec3) -> boolean,
 	clampPointToBox: (self: BoxType, point: Vec3, surfaceOnly: boolean) -> Vec3,
 
 	empty: BoxType,
@@ -200,6 +201,43 @@ function Box:checkPointIntersect(point: Vec3?): boolean
 	else
 		return false
 	end
+end
+
+-- Checks if line segment passed through box
+function Box:checkSegmentIntersect(pointA: Vec3, pointB: Vec3): boolean
+	local localA = self.rotation:inverse():rotateVector(pointA - self.position)
+	local localB = self.rotation:inverse():rotateVector(pointB - self.position)
+	local boxExtents = Vec3.new(self.size.x / 2, self.size.y / 2, self.size.z / 2)
+
+	local direction = localB - localA
+	local axes = {
+		{ origin = localA.x, delta = direction.x, extent = boxExtents.x },
+		{ origin = localA.y, delta = direction.y, extent = boxExtents.y },
+		{ origin = localA.z, delta = direction.z, extent = boxExtents.z },
+	}
+
+	local tMin, tMax = 0, 1
+	for _, axis in axes do
+		if math.abs(axis.delta) < 1e-9 then
+			if axis.origin < -axis.extent or axis.origin > axis.extent then
+				return false
+			end
+		else
+			local t1 = (-axis.extent - axis.origin) / axis.delta
+			local t2 = (axis.extent - axis.origin) / axis.delta
+			if t1 > t2 then
+				t1, t2 = t2, t1
+			end
+
+			tMin = math.max(tMin, t1)
+			tMax = math.min(tMax, t2)
+			if tMin > tMax then
+				return false
+			end
+		end
+	end
+
+	return true
 end
 
 -- d: new method that clamps a world point inside the box. forceSurfaceClamp will put the point on the nearest face even if the point is inside the box.

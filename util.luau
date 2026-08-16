@@ -81,6 +81,25 @@ function Util.getDist(a: Vec3, b: Vec3): number
 	return math.sqrt(x + y + z)
 end
 
+--- Get the shortest distance between a point and a line segment
+--- @param point the point
+--- @param segmentStart the segment's start position
+--- @param segmentEnd the segment's end position
+--- @return the distance between `point` and the closest position on the segment, in centimeters
+function Util.getPointToSegmentDist(point: Vec3, segmentStart: Vec3, segmentEnd: Vec3): number
+	local segment = segmentEnd - segmentStart
+	local segmentLengthSq = segment:dot(segment)
+
+	if segmentLengthSq == 0 then
+		return Util.getDist(point, segmentStart)
+	end
+
+	local t = math.clamp((point - segmentStart):dot(segment) / segmentLengthSq, 0, 1)
+	local closestPoint = segmentStart + segment * t
+
+	return Util.getDist(point, closestPoint)
+end
+
 --- Get the `ReplayFrame` using a `number`
 --- @param index the replay index
 --- @return replay number `index`'s replay frame | 0 returns live frame

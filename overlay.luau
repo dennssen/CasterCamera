@@ -2,6 +2,7 @@
 
 local Utils = require("util")
 local Possession = require("possession")
+local Boost = require("boost")
 
 local Overlay = {}
 
@@ -14,13 +15,19 @@ type Stats = {
 	goals: number,
 	saves: number,
 	assists: number,
+	shots: number,
+	passes: number,
 	possession: number,
+	possessionsWon: number,
+	possessionsLost: number,
+	dribbleMeters: number,
 }
 
 type OverlayPlayer = {
 	stats: Stats,
 	velocity: Vec3,
 	transform: Transform,
+	boost: number,
 }
 
 function newStats(): Stats
@@ -28,7 +35,12 @@ function newStats(): Stats
 		goals = 0,
 		saves = 0,
 		assists = 0,
+		shots = 0,
+		passes = 0,
 		possession = 0,
+		possessionsWon = 0,
+		possessionsLost = 0,
+		dribbleMeters = 0,
 	}
 end
 
@@ -37,6 +49,7 @@ function newPlayer(velocity: Vec3, transform: Transform): OverlayPlayer
 		stats = newStats(),
 		velocity = Vec3.zeroVector,
 		transform = Transform.identity,
+		boost = 0,
 	}
 end
 
@@ -60,7 +73,7 @@ type OverlayTeam = {
 
 export type PossessionData = {
 	possessionSeconds: { home: number, away: number, loose: number },
-	possessionSecondsByPlayer: { [number]: Possession.PlayerPossessionStats },
+	statsByPlayer: { [number]: Possession.PlayerPossessionStats },
 }
 
 type APIStructure = {
@@ -116,19 +129,33 @@ function Overlay.setPossession(data: PossessionData)
 		api.home.possession = data.possessionSeconds.home / totalPossession * 100
 		api.away.possession = data.possessionSeconds.away / totalPossession * 100
 
-		for playerId: number, playerStats: Possession.PlayerPossessionStats in data.possessionSecondsByPlayer do
+		for playerId: number, playerStats: Possession.PlayerPossessionStats in data.statsByPlayer do
 			local playerName = playerStats.name
 			local playerPossession = playerStats.seconds / totalPossession
 
 			if api.home.players[playerName] then
 				api.home.players[playerName].stats.possession = playerPossession * 100
+				api.home.players[playerName].stats.dribbleMeters = playerStats.dribbleMeters
 			elseif api.away.players[playerName] then
 				api.away.players[playerName].stats.possession = playerPossession * 100
+				api.away.players[playerName].stats.dribbleMeters = playerStats.dribbleMeters
 			end
 		end
 	else
 		api.home.possession = 0
 		api.away.possession = 0
+	end
+end
+
+function Overlay.setBoost(data: Boost.PlayerBoostStats)
+	for _, playerStats in data do
+		local playerName = playerStats.name
+
+		if api.home.players[playerName] then
+			api.home.players[playerName].boost = playerStats.boostPercent
+		elseif api.away.players[playerName] then
+			api.away.players[playerName].boost = playerStats.boostPercent
+		end
 	end
 end
 
@@ -234,11 +261,11 @@ function Overlay.increaseStat(teamIndex: number, playerName: string, stat: strin
 		return
 	end
 
-	if team.players[playerName][stat] == nil then
+	if team.players[playerName].stats[stat] == nil then
 		return
 	end
 
-	team.players[playerName][stat] += 1
+	team.players[playerName].stats[stat] += 1
 end
 
 function Overlay.setFollowedPlayer(followedPlayer: string)

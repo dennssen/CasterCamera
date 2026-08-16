@@ -4,10 +4,13 @@ local Box = require("box")
 type BoxType = typeof(Box)
 
 local Util = require("util")
--- Overlay is not required here because requiring it twice creates two separate instances.
--- Call Gamemodes.init(overlay) from main after requiring both modules.
+-- Overlay, Possession and Boost are not required here because requiring them twice creates two separate instances.
+-- Call Gamemodes.init(overlay, profiler, possession, boost) from main after requiring the modules.
 local Overlay: typeof(require("overlay")) = nil :: any
+local Possession: typeof(require("possession")) = nil :: any
+local Boost: typeof(require("boost").Boost) = nil :: any
 local Arena = require("arena")
+type BoostPadDefinition = Arena.BoostPadDefinition
 
 local centerBoxSize = Vec3.new(50, 50, 125)
 local debuging = {
@@ -36,11 +39,32 @@ function CasterArena.new(gamemode: ModuleStateSpectatorLuaApi, frameIndex: numbe
 end
 
 function CasterArena:onGameStartHook()
+	Possession:reset()
 	Overlay.clearStats()
 	Overlay.clearRounds()
+
+	if Boost:isTracking(self) then
+		Boost:reset()
+	end
 end
 
-function CasterArena:onRoundStartHook() end
+function CasterArena:onRoundStartHook()
+	if Boost:isTracking(self) then
+		Boost:refillEveryone()
+	end
+end
+
+function CasterArena:onGoalScoredHook(scoredTeamIndex: number)
+	if Boost:isTracking(self) then
+		Boost:refillEveryone()
+	end
+end
+
+function CasterArena:onOvertimeEnteredHook()
+	if Boost:isTracking(self) then
+		Boost:refillEveryone()
+	end
+end
 
 function CasterArena:onRoundEndHook(isRestart: boolean, homeScore: number, awayScore: number)
 	if not isRestart then
@@ -76,6 +100,7 @@ export type Arena3v3 = CasterArena & {
 	centerBoxOffset: Vec3,
 	goalBoxSize: Vec3,
 	goalPositionOffset: Vec3,
+	boostPadDefinitions: { BoostPadDefinition },
 }
 
 local Arena3v3 = {} :: Arena3v3
@@ -89,6 +114,7 @@ Arena3v3.boxOffset = Vec3.new(0, 0, 650)
 Arena3v3.centerBoxOffset = Vec3.new(0, 0, 300)
 Arena3v3.goalBoxSize = Vec3.new(150, 500, 225)
 Arena3v3.goalPositionOffset = Vec3.new(3250, 0, 175)
+Arena3v3.boostPadDefinitions = {}
 
 function Arena3v3.new(gamemode: ModuleStateSpectatorLuaApi, frameIndex: number): Arena3v3
 	local self: CasterArena = setmetatable(CasterArena.new(gamemode, frameIndex), Arena3v3) :: any
@@ -135,6 +161,8 @@ function Arena3v3:setupDimensions()
 		box = Box.empty,
 	}
 	self.away.goal.box = Box.new(self.away.goal.position, Arena3v3.goalBoxSize, self.away.goal.rotation)
+
+	self.boostPads = Boost.buildArenaPads(self.transform, Arena3v3.boostPadDefinitions)
 end
 
 function Arena3v3:setupOverviews()
@@ -196,6 +224,7 @@ export type Arena4v4 = CasterArena & {
 	centerBoxOffset: Vec3,
 	goalBoxSize: Vec3,
 	goalPositionOffset: Vec3,
+	boostPadDefinitions: { BoostPadDefinition },
 }
 
 local Arena4v4 = {} :: Arena4v4
@@ -209,6 +238,35 @@ Arena4v4.boxOffset = Vec3.new(0, 0, 685)
 Arena4v4.centerBoxOffset = Vec3.new(0, 0, 435)
 Arena4v4.goalBoxSize = Vec3.new(165, 450, 225)
 Arena4v4.goalPositionOffset = Vec3.new(4085, 0, 270)
+Arena4v4.boostPadDefinitions = {
+	{ position = Vec3.new(-1501, -3475, 180), preset = "big" },
+	{ position = Vec3.new(0, -3700, 170), preset = "small" },
+	{ position = Vec3.new(800, -2975, 139), preset = "small" },
+	{ position = Vec3.new(-800, -2975, 139), preset = "small" },
+	{ position = Vec3.new(1501, -3475, 180), preset = "big" },
+	{ position = Vec3.new(2400, -900, 417), preset = "small" },
+	{ position = Vec3.new(2400, 0, 417), preset = "small" },
+	{ position = Vec3.new(2400, 900, 417), preset = "small" },
+	{ position = Vec3.new(0, 500, 37), preset = "small" },
+	{ position = Vec3.new(0, 0, 150), preset = "small" },
+	{ position = Vec3.new(-500, 0, 37), preset = "small" },
+	{ position = Vec3.new(0, -500, 37), preset = "small" },
+	{ position = Vec3.new(500, 0, 37), preset = "small" },
+	{ position = Vec3.new(1330, 0, 550), preset = "small" },
+	{ position = Vec3.new(705, -660, 425), preset = "small" },
+	{ position = Vec3.new(-6, -1170, 698), preset = "small" },
+	{ position = Vec3.new(-1360, 0, 555), preset = "small" },
+	{ position = Vec3.new(-703, 656, 426), preset = "small" },
+	{ position = Vec3.new(-8, 1171, 697), preset = "small" },
+	{ position = Vec3.new(-1501, 3475, 180), preset = "big" },
+	{ position = Vec3.new(1501, 3475, 180), preset = "big" },
+	{ position = Vec3.new(0, 3700, 170), preset = "small" },
+	{ position = Vec3.new(800, 2975, 139), preset = "small" },
+	{ position = Vec3.new(-800, 2975, 139), preset = "small" },
+	{ position = Vec3.new(-2450, 0, 417), preset = "small" },
+	{ position = Vec3.new(-2450, 900, 417), preset = "small" },
+	{ position = Vec3.new(-2450, -900, 417), preset = "small" },
+}
 
 function Arena4v4.new(gamemode: ModuleStateSpectatorLuaApi, frameIndex: number): Arena4v4
 	local self: Arena4v4 = setmetatable(Arena.new(gamemode, frameIndex), Arena4v4) :: any
@@ -266,6 +324,8 @@ function Arena4v4:setupDimensions()
 		box = Box.empty,
 	}
 	self.away.goal.box = Box.new(self.away.goal.position, Arena4v4.goalBoxSize, self.away.goal.rotation)
+
+	self.boostPads = Boost.buildArenaPads(self.transform, Arena4v4.boostPadDefinitions)
 end
 
 function Arena4v4:setupOverviews()
@@ -327,6 +387,7 @@ export type Driftblitz = CasterArena & {
 	centerBoxOffset: Vec3,
 	goalBoxSize: Vec3,
 	goalPositionOffset: Vec3,
+	boostPadDefinitions: { BoostPadDefinition },
 }
 
 local Driftblitz = {} :: Driftblitz
@@ -340,6 +401,7 @@ Driftblitz.boxOffset = Vec3.new(0, 0, 740)
 Driftblitz.centerBoxOffset = Vec3.new(0, 0, 100)
 Driftblitz.goalBoxSize = Vec3.new(100, 890, 300)
 Driftblitz.goalPositionOffset = Vec3.new(5295, 0, 175)
+Driftblitz.boostPadDefinitions = {}
 
 function Driftblitz.new(gamemode: ModuleStateSpectatorLuaApi, frameIndex: number): Driftblitz
 	local self: Driftblitz = setmetatable(Arena.new(gamemode, frameIndex), Driftblitz) :: any
@@ -386,6 +448,8 @@ function Driftblitz:setupDimensions()
 		box = Box.empty,
 	}
 	self.away.goal.box = Box.new(self.away.goal.position, Driftblitz.goalBoxSize, self.away.goal.rotation)
+
+	self.boostPads = Boost.buildArenaPads(self.transform, Driftblitz.boostPadDefinitions)
 end
 
 function Driftblitz:setupOverviews()
@@ -452,6 +516,7 @@ export type ZDrift = CasterArena & {
 	centerBoxOffset: Vec3,
 	goalBoxSize: Vec3,
 	goalPositionOffset: Vec3,
+	boostPadDefinitions: { BoostPadDefinition },
 }
 
 local ZDrift = {} :: ZDrift
@@ -465,6 +530,7 @@ ZDrift.boxOffset = Vec3.new(0, 0, 880)
 ZDrift.centerBoxOffset = Vec3.new(0, 0, 500)
 ZDrift.goalBoxSize = Vec3.new(600, 600, 600)
 ZDrift.goalPositionOffset = Vec3.new(8200, 0, 585)
+ZDrift.boostPadDefinitions = {}
 
 function ZDrift.new(gamemode: ModuleStateSpectatorLuaApi, frameIndex: number): ZDrift
 	local self: ZDrift = setmetatable(Arena.new(gamemode, frameIndex), ZDrift) :: any
@@ -511,6 +577,8 @@ function ZDrift:setupDimensions()
 		box = Box.empty,
 	}
 	self.away.goal.box = Box.new(self.away.goal.position, ZDrift.goalBoxSize, self.away.goal.rotation)
+
+	self.boostPads = Boost.buildArenaPads(self.transform, ZDrift.boostPadDefinitions)
 end
 
 function ZDrift:setupOverviews()
@@ -582,6 +650,7 @@ setmetatable(Strike, { __index = CasterArena })
 Strike.boxSize = Vec3.new(2250, 2250, 1150)
 Strike.boxOffset = Vec3.new(0, 0, 415)
 Strike.centerBoxOffset = Vec3.new(0, 0, -40)
+Strike.boostPadDefinitions = {}
 
 function Strike.new(
 	gamemode: ModuleStateSpectatorLuaApi,
@@ -698,8 +767,15 @@ function Strike:GUIChangeDimensions()
 	self:setupDimensions()
 end
 
-local function init(overlay: typeof(require("overlay")), profiler: typeof(require("profiler")))
+local function init(
+	overlay: typeof(require("overlay")),
+	profiler: typeof(require("profiler")),
+	possession: typeof(require("possession")),
+	boost: typeof(require("boost").Boost)
+)
 	Overlay = overlay
+	Possession = possession
+	Boost = boost
 	Arena.profile(profiler)
 end
 

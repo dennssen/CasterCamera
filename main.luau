@@ -126,6 +126,7 @@ type InputSystem = InputSystem.InputSystem
 
 local BallSim = require("ballsim")
 local Possession = require("possession")
+local Boost = require("boost").Boost
 
 local Box = require("box")
 type BoxType = typeof(Box)
@@ -134,7 +135,7 @@ local Arena = require("arena")
 local Overlay = require("overlay")
 
 local Gamemodes = require("gamemodes")
-Gamemodes.init(Overlay, Profiler)
+Gamemodes.init(Overlay, Profiler, Possession, Boost)
 type CasterArena = Gamemodes.CasterArena
 type Arena3v3 = Gamemodes.Arena3v3
 type Arena4v4 = Gamemodes.Arena4v4
@@ -606,6 +607,16 @@ end
 -- arena
 local arenas: { CasterArena }?
 
+function updateArenaBoostPads()
+	if not arenas then
+		return
+	end
+
+	for _, arena in arenas do
+		arena:setupDimensions()
+	end
+end
+
 function updateArenaOverviews()
 	if not arenas then
 		return
@@ -679,6 +690,10 @@ local awayGoalPotentialEnter: boolean = false
 local previousAwayGoalPotentialEnter: boolean = false
 
 local maximumTimeSincePass: number = 5
+local shotSeparationDistance: number = 30
+local shotDetected: boolean = false
+local currentShotPlayer: ReplayPlayer? = nil
+local previousContactCheckBallPosition: Vec3? = nil
 
 local goalPlayer: ReplayPlayer? = nil
 
@@ -1205,6 +1220,7 @@ function resetPlayersWithBall()
 	ballCollisionInfo.home.previous = nil
 	ballCollisionInfo.away.current = nil
 	ballCollisionInfo.away.previous = nil
+	previousContactCheckBallPosition = nil
 end
 
 function getClosestArena(targetPosition: Vec3): CasterArena
@@ -1240,6 +1256,7 @@ function setSelectedArena(arena: CasterArena)
 		Overlay.setArenaSize(arena.box.size)
 		Overlay.clearRounds()
 		Possession:setArena(arena)
+		Boost:setArena(arena)
 	end
 	arena.instantUpdate = true
 	selectedArena = arena
@@ -1851,6 +1868,14 @@ function GUI_CameraDebug()
 				Gui.treePop()
 			end
 
+			if Gui.treeNode("Selected Arena Boost Pads") then
+				if Boost:padEditorGui(selectedArena) then
+					updateArenaBoostPads()
+					Boost:resetPadCooldowns()
+				end
+				Gui.treePop()
+			end
+
 			Gui.text("Home Team: ")
 			Gui.indent()
 			for i, player in selectedArena.home.players do
@@ -2029,6 +2054,11 @@ function onGui()
 		Possession:gui()
 		Gui.endTabItem()
 	end
+
+	if Gui.beginTabItem("Boost") then
+		Boost:gui()
+		Gui.endTabItem()
+	end
 	Gui.endTabBar()
 
 	Gui.newLine()
@@ -2154,6 +2184,33 @@ function getClosestPlayerToBall(maximumDistance: number?): ReplayPlayer?
 		local headDistance = Util.getDist(ball.transform.position, headPosition)
 		local leftHandDistance = Util.getDist(ball.transform.position, leftHandPosition)
 		local rightHandDistance = Util.getDist(ball.transform.position, rightHandPosition)
+
+		local minimumDistance = math.min(headDistance, leftHandDistance, rightHandDistance)
+
+		if minimumDistance < closestPlayerDistance then
+			closestPlayerDistance = minimumDistance
+			closestPlayer = player
+		end
+	end
+
+	return closestPlayer
+end
+
+-- instead of just the ball pos, check the path in the last frame so it is less likely to skip touches
+function getClosestPlayerToBallSegment(segmentStart: Vec3, segmentEnd: Vec3, maximumDistance: number?): ReplayPlayer?
+	local players = selectedArena.players
+	local closestPlayerDistance = maximumDistance or math.huge
+	local closestPlayer: ReplayPlayer = nil
+
+	for _, player in players do
+		local root = player.root
+		local headPosition = player.head.position
+		local leftHandPosition = root.rotation:rotateVector(player.leftHand.position) + root.position
+		local rightHandPosition = root.rotation:rotateVector(player.rightHand.position) + root.position
+
+		local headDistance = Util.getPointToSegmentDist(headPosition, segmentStart, segmentEnd)
+		local leftHandDistance = Util.getPointToSegmentDist(leftHandPosition, segmentStart, segmentEnd)
+		local rightHandDistance = Util.getPointToSegmentDist(rightHandPosition, segmentStart, segmentEnd)
 
 		local minimumDistance = math.min(headDistance, leftHandDistance, rightHandDistance)
 
@@ -2658,8 +2715,40 @@ function rotateCamera()
 	camera.rotation = gravityChaser * Quat.fromEuler(rotEuler.x, rotEuler.y, rotEuler.z)
 end
 
+function checkForPossessionChange(newTeam: string, newTeamIndex: number, newPlayer: ReplayPlayer)
+	if not selectedArena.isGameActive then
+		return
+	end
+
+	local previousTeam = getPossessionTeam()
+	if previousTeam == nil then
+		return
+	end
+
+	local previousTeamInfo = ballCollisionInfo[previousTeam]
+	if previousTeamInfo.current == nil then
+		return
+	end
+
+	local previousPlayer = previousTeamInfo.current.player
+
+	if previousTeam == newTeam then
+		Overlay.increaseStat(newTeamIndex, previousPlayer.playerName, "passes")
+		return
+	end
+
+	local losingTeamIndex = previousTeam == "home" and Util.TeamIndex.HomeTeam or Util.TeamIndex.AwayTeam
+
+	Overlay.increaseStat(newTeamIndex, newPlayer.playerName, "possessionsWon")
+	Overlay.increaseStat(losingTeamIndex, previousPlayer.playerName, "possessionsLost")
+end
+
 function checkBallContact()
-	local contactPlayer: ReplayPlayer? = getClosestPlayerToBall(30)
+	local segmentStart = previousContactCheckBallPosition or ball.transform.position
+	local segmentEnd = ball.transform.position
+	previousContactCheckBallPosition = segmentEnd
+
+	local contactPlayer: ReplayPlayer? = getClosestPlayerToBallSegment(segmentStart, segmentEnd, 30)
 	if contactPlayer == nil then
 		return
 	end
@@ -2674,6 +2763,7 @@ function checkBallContact()
 			ballCollisionInfo.home.current.lastContactPlace = ball.transform.position
 			return
 		end
+		checkForPossessionChange("home", Util.TeamIndex.HomeTeam, contactPlayer)
 		ballCollisionInfo.home.previous = ballCollisionInfo.home.current
 		ballCollisionInfo.home.current = {
 			lastContactPlace = ball.transform.position,
@@ -2688,6 +2778,7 @@ function checkBallContact()
 			ballCollisionInfo.away.current.lastContactPlace = ball.transform.position
 			return
 		end
+		checkForPossessionChange("away", Util.TeamIndex.AwayTeam, contactPlayer)
 		ballCollisionInfo.away.previous = ballCollisionInfo.away.current
 		ballCollisionInfo.away.current = {
 			lastContactPlace = ball.transform.position,
@@ -2752,6 +2843,40 @@ function getAssistPlayer(team: string): ReplayPlayer?
 		return possessionTeam.previous.player
 	else
 		return nil
+	end
+end
+
+function checkForShot()
+	local possesionTeamString: string? = getPossessionTeam()
+
+	if not possesionTeamString then
+		return
+	end
+
+	local possessionTeam = ballCollisionInfo[possesionTeamString]
+
+	if possessionTeam.current == nil then
+		return
+	end
+
+	if possessionTeam.current.player ~= currentShotPlayer then
+		currentShotPlayer = possessionTeam.current.player
+		shotDetected = false
+	end
+
+	local separationDistance = Util.getDist(ball.transform.position, possessionTeam.current.lastContactPlace)
+	local isSeparated = separationDistance >= shotSeparationDistance
+
+	if not isSeparated or shotDetected then
+		return
+	end
+
+	if homeGoalPotentialEnter and possessionTeam.current.player.teamIndex == Util.TeamIndex.AwayTeam then
+		shotDetected = true
+		Overlay.increaseStat(Util.TeamIndex.AwayTeam, possessionTeam.current.player.playerName, "shots")
+	elseif awayGoalPotentialEnter and possessionTeam.current.player.teamIndex == Util.TeamIndex.HomeTeam then
+		shotDetected = true
+		Overlay.increaseStat(Util.TeamIndex.HomeTeam, possessionTeam.current.player.playerName, "shots")
 	end
 end
 
@@ -2909,6 +3034,8 @@ function checkPotentialStatChange(homeGoalBox: BoxType, awayGoalBox: BoxType)
 	end
 
 	checkBallContact()
+
+	checkForShot()
 
 	if checkForGoalPotential() then
 		earlyStatChangeReturn(false)
@@ -3109,6 +3236,9 @@ function debugCode()
 			arena.centerBox:render(0, 1, 0)
 			arena.home.goal.box:render(1, 0, 0)
 			arena.away.goal.box:render(0, 0, 1)
+			for _, boostPad in arena.boostPads do
+				boostPad.box:render(1, 1, 0)
+			end
 		end
 	end
 
@@ -3163,6 +3293,7 @@ function tick(dt)
 	ball = selectedArena.ball
 
 	Possession:tick(dt)
+	Boost:tick(dt)
 
 	if #gameData.players < 1 and povFollow then
 		stopFollow()
@@ -3200,8 +3331,9 @@ function tick(dt)
 	if sendOverlayInfo then
 		Overlay.setPossession({
 			possessionSeconds = Possession.possessionSeconds,
-			possessionSecondsByPlayer = Possession.possessionSecondsByPlayer,
+			statsByPlayer = Possession.statsByPlayer,
 		})
+		Overlay.setBoost(Boost.statsByPlayer)
 		Overlay.tick()
 	end
 
