@@ -126,7 +126,9 @@ type InputSystem = InputSystem.InputSystem
 
 local BallSim = require("ballsim")
 local Possession = require("possession")
+Profiler:wrapModule(Possession)
 local Boost = require("boost").Boost
+Profiler:wrapModule(Boost)
 
 local Box = require("box")
 type BoxType = typeof(Box)

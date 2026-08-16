@@ -50,7 +50,6 @@ export type PlayerBoostStats = { [number]: BoostStats }
 
 type PlayerBoostState = {
 	onPad: boolean,
-	lastBodyPosition: Vec3?,
 	lastHeadPosition: Vec3?,
 	lastLeftHandPosition: Vec3?,
 	lastRightHandPosition: Vec3?,
@@ -59,7 +58,6 @@ type PlayerBoostState = {
 export type PadContact = {
 	pad: ArenaBoostPad,
 	padIndex: number,
-	part: string,
 }
 
 type Boost = {
@@ -83,12 +81,22 @@ type Boost = {
 	isTracking: <A, H, W>(self: Boost, arena: Arena<A, H, W>) -> boolean,
 	refillEveryone: (self: Boost) -> (),
 	getPlayerState: (self: Boost, player: ReplayPlayer) -> PlayerBoostState,
+	getLastStatePart: (state: PlayerBoostState, part: string) -> Vec3?,
 	getPlayerStats: (self: Boost, player: ReplayPlayer) -> BoostStats,
 	resetPadCooldowns: (self: Boost) -> (),
 	getPadAvailableAt: (self: Boost, padIndex: number) -> number,
+	getClosestPadToPlayer: (
+		self: Boost,
+		player: ReplayPlayer
+	) -> {
+		playerClosestPoint: Vec3,
+		playerClosestPart: string,
+		closestPadIndex: number,
+	}?,
 	isPadAvailable: (self: Boost, padIndex: number) -> boolean,
-	getPlayerPadContact: (self: Boost, player: ReplayPlayer, state: PlayerBoostState) -> PadContact?,
-	collectPad: (self: Boost, player: ReplayPlayer, contact: PadContact) -> (),
+	getSegmentPadContact: (self: Boost, padIndex: number, segmentStart: Vec3, segmentEnd: Vec3) -> PadContact?,
+	collectPad: (self: Boost, player: ReplayPlayer, contact: PadContact, part: string) -> (),
+	updatePlayerState: (self: Boost, player: ReplayPlayer) -> (),
 	tick: (self: Boost, dt: number) -> (),
 	gui: (self: Boost) -> (),
 	addPadAtCamera: <A, H, W>(self: Boost, arena: Arena<A, H, W>, preset: BoostPadPreset) -> string,
@@ -194,6 +202,18 @@ function Boost:getPlayerState(player: ReplayPlayer): PlayerBoostState
 	return state
 end
 
+function Boost.getLastStatePart(state: PlayerBoostState, part: string): Vec3?
+	if part == "head" then
+		return state.lastHeadPosition
+	elseif part == "leftHand" then
+		return state.lastLeftHandPosition
+	elseif part == "rightHand" then
+		return state.lastRightHandPosition
+	end
+
+	return nil
+end
+
 function Boost:getPlayerStats(player: ReplayPlayer): BoostStats
 	local playerStats = self.statsByPlayer[player.playerId]
 
@@ -234,54 +254,82 @@ function Boost:getPadAvailableAt(padIndex: number): number
 	return availableAt
 end
 
-function Boost:isPadAvailable(padIndex: number): boolean
-	return os.clock() >= self:getPadAvailableAt(padIndex)
-end
+function Boost:getClosestPadToPlayer(player: ReplayPlayer): {
+	playerClosestPoint: Vec3,
+	playerClosestPart: string,
+	closestPadIndex: number,
+}?
+	if not self.arena then
+		error("can't find closest pad to player - no arena")
+	end
 
-function Boost:getPlayerPadContact(player: ReplayPlayer, state: PlayerBoostState): PadContact?
-	local arena = self.arena
+	local closestPadDistance = 150
+	local closestPad: ArenaBoostPad? = nil
+	local closestPadIndex: number = -1
 
-	local bodyPosition = player.root.position
 	local headPosition = player.head.position
 	local leftHandPosition = Util.getLeftPlayerHand(player).position
 	local rightHandPosition = Util.getRightPlayerHand(player).position
 
-	local points = {
-		{ position = bodyPosition, lastPosition = state.lastBodyPosition or bodyPosition, part = "body" },
-		{ position = headPosition, lastPosition = state.lastHeadPosition or headPosition, part = "head" },
-		{
-			position = leftHandPosition,
-			lastPosition = state.lastLeftHandPosition or leftHandPosition,
-			part = "leftHand",
-		},
-		{
-			position = rightHandPosition,
-			lastPosition = state.lastRightHandPosition or rightHandPosition,
-			part = "rightHand",
-		},
-	}
+	for i, pad in self.arena.boostPads do
+		local headDistance = Util.getDist(pad.box.position, headPosition)
 
-	state.lastBodyPosition = bodyPosition
-	state.lastHeadPosition = headPosition
-	state.lastLeftHandPosition = leftHandPosition
-	state.lastRightHandPosition = rightHandPosition
+		if headDistance < closestPadDistance then
+			closestPadDistance = headDistance
+			closestPad = pad
+			closestPadIndex = i
+		end
+	end
+
+	if closestPad == nil then
+		-- No pad close enough for further calculation to be worth
+		return nil
+	end
+
+	local headDistance = Util.getDist(closestPad.box.position, headPosition)
+	local leftHandDistance = Util.getDist(closestPad.box.position, leftHandPosition)
+	local rightHandDistance = Util.getDist(closestPad.box.position, rightHandPosition)
+
+	local closestLimbDistance = math.min(headDistance, leftHandDistance, rightHandDistance)
+	local closestPart, closestPoint = nil, nil
+	if headDistance == closestLimbDistance then
+		closestPart = "head"
+		closestPoint = headPosition
+	elseif leftHandDistance == closestLimbDistance then
+		closestPart = "leftHand"
+		closestPoint = leftHandPosition
+	else
+		closestPart = "rightHand"
+		closestPoint = rightHandPosition
+	end
+
+	return {
+		closestPadIndex = closestPadIndex,
+		playerClosestPart = closestPart,
+		playerClosestPoint = closestPoint,
+	}
+end
+
+function Boost:isPadAvailable(padIndex: number): boolean
+	return os.clock() >= self:getPadAvailableAt(padIndex)
+end
+
+function Boost:getSegmentPadContact(padIndex: number, segmentStart: Vec3, segmentEnd: Vec3): PadContact?
+	local arena = self.arena
 
 	if not arena then
 		return nil
 	end
 
-	for padIndex, pad in arena.boostPads do
-		for _, point in points do
-			if pad.box:checkSegmentIntersect(point.lastPosition, point.position) then
-				return { pad = pad, padIndex = padIndex, part = point.part }
-			end
-		end
+	local pad = arena.boostPads[padIndex]
+	if pad.box:checkSegmentIntersect(segmentStart, segmentEnd) then
+		return { pad = pad, padIndex = padIndex }
 	end
 
 	return nil
 end
 
-function Boost:collectPad(player: ReplayPlayer, contact: PadContact)
+function Boost:collectPad(player: ReplayPlayer, contact: PadContact, part: string)
 	local preset = contact.pad.preset
 	local playerStats = self:getPlayerStats(player)
 
@@ -308,9 +356,16 @@ function Boost:collectPad(player: ReplayPlayer, contact: PadContact)
 
 	if self.debug then
 		print(
-			`[Boost] {player.playerName} touched a {preset} boost pad with {contact.part} (+{gain}%, now {playerStats.boostPercent}%)`
+			`[Boost] {player.playerName} touched a {preset} boost pad with {part} (+{gain}%, now {playerStats.boostPercent}%)`
 		)
 	end
+end
+
+function Boost:updatePlayerState(player: ReplayPlayer)
+	local state = self.playerStates[player.playerId]
+	state.lastHeadPosition = player.head.position
+	state.lastLeftHandPosition = Util.getLeftPlayerHand(player).position
+	state.lastRightHandPosition = Util.getRightPlayerHand(player).position
 end
 
 function Boost:tick(dt: number)
@@ -323,16 +378,31 @@ function Boost:tick(dt: number)
 		local state = self:getPlayerState(player)
 		local playerStats = self:getPlayerStats(player)
 
-		local contact = self:getPlayerPadContact(player, state)
-		if contact and not state.onPad then
-			self:collectPad(player, contact)
+		local closestPadInfo = self:getClosestPadToPlayer(player)
+		if closestPadInfo then
+			local lastStatePart = self.getLastStatePart(state, closestPadInfo.playerClosestPart)
+
+			if not lastStatePart then
+				lastStatePart = closestPadInfo.playerClosestPoint
+			end
+
+			local contact = self:getSegmentPadContact(
+				closestPadInfo.closestPadIndex,
+				closestPadInfo.playerClosestPoint,
+				lastStatePart :: Vec3
+			)
+			if contact and not state.onPad then
+				self:collectPad(player, contact, closestPadInfo.playerClosestPart)
+			end
+			state.onPad = contact ~= nil
 		end
-		state.onPad = contact ~= nil
 
 		local isBoosting = player.leftThrusterActive or player.rightThrusterActive
 		if arena.isGameActive and isBoosting then
 			playerStats.boostPercent = math.max(0, playerStats.boostPercent - BOOST_DRAIN_PER_SECOND * dt)
 		end
+
+		self:updatePlayerState(player)
 	end
 end
 
