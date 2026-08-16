@@ -679,6 +679,7 @@ local awayGoalPotentialEnter: boolean = false
 local previousAwayGoalPotentialEnter: boolean = false
 
 local maximumTimeSincePass: number = 5
+local previousContactCheckBallPosition: Vec3? = nil
 
 local goalPlayer: ReplayPlayer? = nil
 
@@ -1205,6 +1206,7 @@ function resetPlayersWithBall()
 	ballCollisionInfo.home.previous = nil
 	ballCollisionInfo.away.current = nil
 	ballCollisionInfo.away.previous = nil
+	previousContactCheckBallPosition = nil
 end
 
 function getClosestArena(targetPosition: Vec3): CasterArena
@@ -2166,6 +2168,33 @@ function getClosestPlayerToBall(maximumDistance: number?): ReplayPlayer?
 	return closestPlayer
 end
 
+-- instead of just the ball pos, check the path in the last frame so it is less likely to skip touches
+function getClosestPlayerToBallSegment(segmentStart: Vec3, segmentEnd: Vec3, maximumDistance: number?): ReplayPlayer?
+	local players = selectedArena.players
+	local closestPlayerDistance = maximumDistance or math.huge
+	local closestPlayer: ReplayPlayer = nil
+
+	for _, player in players do
+		local root = player.root
+		local headPosition = player.head.position
+		local leftHandPosition = root.rotation:rotateVector(player.leftHand.position) + root.position
+		local rightHandPosition = root.rotation:rotateVector(player.rightHand.position) + root.position
+
+		local headDistance = Util.getPointToSegmentDist(headPosition, segmentStart, segmentEnd)
+		local leftHandDistance = Util.getPointToSegmentDist(leftHandPosition, segmentStart, segmentEnd)
+		local rightHandDistance = Util.getPointToSegmentDist(rightHandPosition, segmentStart, segmentEnd)
+
+		local minimumDistance = math.min(headDistance, leftHandDistance, rightHandDistance)
+
+		if minimumDistance < closestPlayerDistance then
+			closestPlayerDistance = minimumDistance
+			closestPlayer = player
+		end
+	end
+
+	return closestPlayer
+end
+
 function getClosestPlayerToLineOfSight(): ReplayPlayer?
 	local players = selectedArena.players
 	local cameraForward = camera.rotation:getForwardVector()
@@ -2659,7 +2688,11 @@ function rotateCamera()
 end
 
 function checkBallContact()
-	local contactPlayer: ReplayPlayer? = getClosestPlayerToBall(30)
+	local segmentStart = previousContactCheckBallPosition or ball.transform.position
+	local segmentEnd = ball.transform.position
+	previousContactCheckBallPosition = segmentEnd
+
+	local contactPlayer: ReplayPlayer? = getClosestPlayerToBallSegment(segmentStart, segmentEnd, 30)
 	if contactPlayer == nil then
 		return
 	end
