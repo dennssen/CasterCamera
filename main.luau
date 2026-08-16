@@ -1,6 +1,6 @@
 --!strict
 
-local version: string = "2.6.4"
+local version: string = "2.7.0"
 
 -- Known Issues:
 -- Double clicking and hold right click while not moving the mouse makes you unable to rotate the camera. (This is a spectator issue, only happens with UI open)
