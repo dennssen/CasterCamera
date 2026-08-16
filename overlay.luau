@@ -21,13 +21,13 @@ type Stats = {
 	possessionsWon: number,
 	possessionsLost: number,
 	dribbleMeters: number,
-	boost: number,
 }
 
 type OverlayPlayer = {
 	stats: Stats,
 	velocity: Vec3,
 	transform: Transform,
+	boost: number,
 }
 
 function newStats(): Stats
@@ -41,7 +41,6 @@ function newStats(): Stats
 		possessionsWon = 0,
 		possessionsLost = 0,
 		dribbleMeters = 0,
-		boost = 0,
 	}
 end
 
@@ -50,6 +49,7 @@ function newPlayer(velocity: Vec3, transform: Transform): OverlayPlayer
 		stats = newStats(),
 		velocity = Vec3.zeroVector,
 		transform = Transform.identity,
+		boost = 0,
 	}
 end
 
@@ -73,7 +73,7 @@ type OverlayTeam = {
 
 export type PossessionData = {
 	possessionSeconds: { home: number, away: number, loose: number },
-	possessionSecondsByPlayer: { [number]: Possession.PlayerPossessionStats },
+	statsByPlayer: { [number]: Possession.PlayerPossessionStats },
 }
 
 type APIStructure = {
@@ -129,7 +129,7 @@ function Overlay.setPossession(data: PossessionData)
 		api.home.possession = data.possessionSeconds.home / totalPossession * 100
 		api.away.possession = data.possessionSeconds.away / totalPossession * 100
 
-		for playerId: number, playerStats: Possession.PlayerPossessionStats in data.possessionSecondsByPlayer do
+		for playerId: number, playerStats: Possession.PlayerPossessionStats in data.statsByPlayer do
 			local playerName = playerStats.name
 			local playerPossession = playerStats.seconds / totalPossession
 
@@ -147,16 +147,14 @@ function Overlay.setPossession(data: PossessionData)
 	end
 end
 
-export type BoostData = { [number]: Boost.PlayerBoostStats }
-
-function Overlay.setBoost(data: BoostData)
-	for _, playerStats: Boost.PlayerBoostStats in data do
+function Overlay.setBoost(data: Boost.PlayerBoostStats)
+	for _, playerStats in data do
 		local playerName = playerStats.name
 
 		if api.home.players[playerName] then
-			api.home.players[playerName].stats.boost = playerStats.boostPercent
+			api.home.players[playerName].boost = playerStats.boostPercent
 		elseif api.away.players[playerName] then
-			api.away.players[playerName].stats.boost = playerStats.boostPercent
+			api.away.players[playerName].boost = playerStats.boostPercent
 		end
 	end
 end

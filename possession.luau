@@ -31,7 +31,7 @@ type Possession = {
 	lastPossessionHolderPosition: Vec3?,
 
 	possessionSeconds: { home: number, away: number, loose: number },
-	possessionSecondsByPlayer: { [number]: PlayerPossessionStats },
+	statsByPlayer: { [number]: PlayerPossessionStats },
 
 	reset: (self: Possession) -> (),
 	setArena: (self: Possession, arena: Arena) -> (),
@@ -57,7 +57,7 @@ Possession.lastPossessionHolderId = nil
 Possession.lastPossessionHolderPosition = nil
 
 Possession.possessionSeconds = { home = 0, away = 0, loose = 0 }
-Possession.possessionSecondsByPlayer = {}
+Possession.statsByPlayer = {}
 
 function Possession:setArena(arena: Arena)
 	self.arena = arena
@@ -72,7 +72,7 @@ function Possession:reset()
 	self.lastPossessionHolderId = nil
 	self.lastPossessionHolderPosition = nil
 	self.possessionSeconds = { home = 0, away = 0, loose = 0 }
-	self.possessionSecondsByPlayer = {}
+	self.statsByPlayer = {}
 end
 
 function Possession:printResults()
@@ -88,7 +88,7 @@ function Possession:printResults()
 	print(`[Possession] Home: {homePct}% Loose: {loosePct}% Away: {awayPct}%`)
 
 	local players = {}
-	for _, playerStats in self.possessionSecondsByPlayer do
+	for _, playerStats in self.statsByPlayer do
 		table.insert(players, playerStats)
 	end
 
@@ -141,10 +141,10 @@ function Possession:tick(dt: number)
 
 	if arena.isGameActive then
 		if self.possessionHolder then
-			local playerStats = self.possessionSecondsByPlayer[self.possessionHolder.playerId]
+			local playerStats = self.statsByPlayer[self.possessionHolder.playerId]
 			if not playerStats then
 				playerStats = { name = self.possessionHolder.playerName, seconds = 0, dribbleMeters = 0 }
-				self.possessionSecondsByPlayer[self.possessionHolder.playerId] = playerStats
+				self.statsByPlayer[self.possessionHolder.playerId] = playerStats
 			end
 			playerStats.seconds += dt
 

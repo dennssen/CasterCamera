@@ -104,16 +104,6 @@ Util.initializeConfig({
 	},
 	keyboardKeybinds = "",
 	gamepadKeybinds = "",
-	boostPadPositions = {
-		_3v3 = "",
-		_4v4 = "",
-		_driftblitz = "",
-		_zdrift = "",
-	},
-	boostPadPresets = {
-		small = Vec3.new(77, 77, 50),
-		big = Vec3.new(120, 120, 100),
-	},
 	postProcessing = {
 		bloomIntensity = 0.675,
 		bloomThreshold = -1,
@@ -136,7 +126,7 @@ type InputSystem = InputSystem.InputSystem
 
 local BallSim = require("ballsim")
 local Possession = require("possession")
-local Boost = require("boost")
+local Boost = require("boost").Boost
 
 local Box = require("box")
 type BoxType = typeof(Box)
@@ -145,7 +135,7 @@ local Arena = require("arena")
 local Overlay = require("overlay")
 
 local Gamemodes = require("gamemodes")
-Gamemodes.init(Overlay, Profiler, Possession)
+Gamemodes.init(Overlay, Profiler, Possession, Boost)
 type CasterArena = Gamemodes.CasterArena
 type Arena3v3 = Gamemodes.Arena3v3
 type Arena4v4 = Gamemodes.Arena4v4
@@ -157,47 +147,6 @@ local Arena4v4 = Gamemodes.Arena4v4
 local Driftblitz = Gamemodes.Driftblitz
 local ZDrift = Gamemodes.ZDrift
 local Strike = Gamemodes.Strike
-
-export type BoostPadDef = {
-	position: Vec3,
-	preset: string, -- "small" or "big"
-}
-
-local BOOST_PAD_PRESETS = { "small", "big" }
-local DEFAULT_BOOST_PAD_PRESET = "small"
-
-function encodeBoostPadDefs(defs: { BoostPadDef }): string
-	local parts: { string } = {}
-	for _, def in defs do
-		table.insert(parts, `{def.preset}:{tostring(def.position)}`)
-	end
-	return table.concat(parts, "|")
-end
-
-function decodeBoostPadDefs(encoded: string): { BoostPadDef }
-	local defs: { BoostPadDef } = {}
-	for part in encoded:gmatch("[^|]+") do
-		local preset, vecPart = part:match("^(%a+):(.+)$")
-		if preset and vecPart then
-			table.insert(defs, { position = Util.stringToVec3(vecPart), preset = preset })
-		end
-	end
-	return defs
-end
-
-local boostPadTypeInfo: { [string]: { classTable: any, configKey: string } } = {
-	["3v3"] = { classTable = Arena3v3, configKey = "_3v3" },
-	["4v4"] = { classTable = Arena4v4, configKey = "_4v4" },
-	["driftblitz"] = { classTable = Driftblitz, configKey = "_driftblitz" },
-	["zdrift"] = { classTable = ZDrift, configKey = "_zdrift" },
-}
-
-for _, info in boostPadTypeInfo do
-	local encoded = config.boostPadPositions[info.configKey]
-	if encoded ~= "" then
-		info.classTable.boostPadDefs = decodeBoostPadDefs(encoded)
-	end
-end
 
 type ArenaTeam = Arena.ArenaTeam<Gamemodes.OverviewData>
 
@@ -668,28 +617,6 @@ function updateArenaBoostPads()
 	end
 end
 
-function removeBoostPad(arenaType: string, index: number)
-	local info = boostPadTypeInfo[arenaType]
-	if not info then
-		return
-	end
-
-	table.remove(info.classTable.boostPadDefs, index)
-	config.boostPadPositions[info.configKey] = encodeBoostPadDefs(info.classTable.boostPadDefs)
-	saveConfig()
-	updateArenaBoostPads()
-end
-
-function saveBoostPads(arenaType: string)
-	local info = boostPadTypeInfo[arenaType]
-	if not info then
-		return
-	end
-
-	config.boostPadPositions[info.configKey] = encodeBoostPadDefs(info.classTable.boostPadDefs)
-	saveConfig()
-end
-
 function updateArenaOverviews()
 	if not arenas then
 		return
@@ -701,26 +628,6 @@ function updateArenaOverviews()
 end
 
 local selectedArena: CasterArena = nil
-
-function addBoostPadAtCamera(preset: string): string
-	if not selectedArena then
-		return "No arena selected"
-	end
-
-	local info = boostPadTypeInfo[selectedArena.type]
-	if not info then
-		return `Boost pads aren't supported for arena type "{selectedArena.type}"`
-	end
-
-	local localOffset =
-		selectedArena.transform.rotation:inverse():rotateVector(camera.position - selectedArena.transform.position)
-
-	table.insert(info.classTable.boostPadDefs, { position = localOffset, preset = preset })
-	saveBoostPads(selectedArena.type)
-	updateArenaBoostPads()
-
-	return `Added {preset} boost pad #{#info.classTable.boostPadDefs} to {selectedArena.type}`
-end
 
 -- Particles
 ParticleSystem.vibrance = config.vibrance
@@ -1207,8 +1114,6 @@ local overviewMessage = {
 	overviewNumber = 0,
 	message = "",
 }
-local boostPadMessage: string = ""
-local boostPadPresetToAdd: string = DEFAULT_BOOST_PAD_PRESET
 local tpGamemodeName: string = ""
 local dataGamemodeName: string = ""
 
@@ -1782,99 +1687,6 @@ function GUI_CameraSettings()
 		Gui.endTabItem()
 	end
 
-	if selectedArena and Gui.beginTabItem("Boost Pads") then
-		Gui.indent()
-
-		Gui.separatorText("Boost Pad Size Presets")
-		Gui.text("Editing a preset resizes every pad using it, in every arena, live.")
-
-		config.boostPadPresets.small = Gui.dragFloat3("Small Size", config.boostPadPresets.small, 1, 1, math.huge)
-		if Gui.isItemActive() then
-			updateArenaBoostPads()
-			saveConfig()
-		end
-
-		config.boostPadPresets.big = Gui.dragFloat3("Big Size", config.boostPadPresets.big, 1, 1, math.huge)
-		if Gui.isItemActive() then
-			updateArenaBoostPads()
-			saveConfig()
-		end
-
-		Gui.newLine()
-		Gui.separatorText(`{capitalize(selectedArena.type)} Boost Pads`)
-
-		local info = boostPadTypeInfo[selectedArena.type]
-
-		if not info then
-			Gui.text("Boost pads aren't supported for this arena type")
-		else
-			if Gui.beginCombo("Preset To Add", boostPadPresetToAdd) then
-				for _, preset in BOOST_PAD_PRESETS do
-					if Gui.selectable(preset, boostPadPresetToAdd == preset) then
-						boostPadPresetToAdd = preset
-					end
-				end
-				Gui.endCombo()
-			end
-
-			if Gui.button("Add Boost Pad At Camera") then
-				boostPadMessage = addBoostPadAtCamera(boostPadPresetToAdd)
-			end
-			Gui.setItemTooltip(
-				"Adds a boost pad at your current camera position for this arena type and saves it to your settings"
-			)
-
-			if boostPadMessage ~= "" then
-				Gui.text(boostPadMessage)
-			end
-
-			Gui.newLine()
-
-			local removeIndex: number? = nil
-			local changed = false
-
-			for i, def: BoostPadDef in info.classTable.boostPadDefs do
-				if i ~= 1 then
-					Gui.separator()
-				end
-				Gui.text(`Boost Pad #{i}`)
-
-				def.position = Gui.dragFloat3(`Position##boostPad{i}`, def.position, 1, -math.huge, math.huge)
-				if Gui.isItemActive() then
-					changed = true
-				end
-				Gui.setItemTooltip("Drag to move this boost pad")
-
-				if Gui.beginCombo(`Preset##boostPad{i}`, def.preset) then
-					for _, preset in BOOST_PAD_PRESETS do
-						if Gui.selectable(`{preset}##boostPad{i}`, def.preset == preset) then
-							def.preset = preset
-							changed = true
-						end
-					end
-					Gui.endCombo()
-				end
-
-				if Gui.button(`Remove##boostPad{i}`) then
-					removeIndex = i
-				end
-			end
-
-			if changed then
-				updateArenaBoostPads()
-				saveBoostPads(selectedArena.type)
-			end
-
-			if removeIndex then
-				removeBoostPad(selectedArena.type, removeIndex)
-				boostPadMessage = `Removed boost pad #{removeIndex}`
-			end
-		end
-
-		Gui.unindent()
-		Gui.endTabItem()
-	end
-
 	if Gui.beginTabItem("Overlay") then
 		Gui.indent()
 		sendOverlayInfo = Gui.checkbox("Send Overlay Info", sendOverlayInfo)
@@ -2053,6 +1865,13 @@ function GUI_CameraDebug()
 			end
 			if Gui.treeNode("Selected Arena Dimensions") then
 				selectedArena:GUIChangeDimensions()
+				Gui.treePop()
+			end
+
+			if Gui.treeNode("Selected Arena Boost Pads") then
+				if Boost:padEditorGui(selectedArena) then
+					updateArenaBoostPads()
+				end
 				Gui.treePop()
 			end
 
@@ -3511,7 +3330,7 @@ function tick(dt)
 	if sendOverlayInfo then
 		Overlay.setPossession({
 			possessionSeconds = Possession.possessionSeconds,
-			possessionSecondsByPlayer = Possession.possessionSecondsByPlayer,
+			statsByPlayer = Possession.statsByPlayer,
 		})
 		Overlay.setBoost(Boost.statsByPlayer)
 		Overlay.tick()
