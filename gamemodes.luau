@@ -4,9 +4,10 @@ local Box = require("box")
 type BoxType = typeof(Box)
 
 local Util = require("util")
--- Overlay is not required here because requiring it twice creates two separate instances.
--- Call Gamemodes.init(overlay) from main after requiring both modules.
+-- Overlay and Possession are not required here because requiring them twice creates two separate instances.
+-- Call Gamemodes.init(overlay, profiler, possession) from main after requiring the modules.
 local Overlay: typeof(require("overlay")) = nil :: any
+local Possession: typeof(require("possession")) = nil :: any
 local Arena = require("arena")
 
 local centerBoxSize = Vec3.new(50, 50, 125)
@@ -36,6 +37,7 @@ function CasterArena.new(gamemode: ModuleStateSpectatorLuaApi, frameIndex: numbe
 end
 
 function CasterArena:onGameStartHook()
+	Possession:reset()
 	Overlay.clearStats()
 	Overlay.clearRounds()
 end
@@ -698,8 +700,13 @@ function Strike:GUIChangeDimensions()
 	self:setupDimensions()
 end
 
-local function init(overlay: typeof(require("overlay")), profiler: typeof(require("profiler")))
+local function init(
+	overlay: typeof(require("overlay")),
+	profiler: typeof(require("profiler")),
+	possession: typeof(require("possession"))
+)
 	Overlay = overlay
+	Possession = possession
 	Arena.profile(profiler)
 end
 

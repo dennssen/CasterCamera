@@ -134,7 +134,7 @@ local Arena = require("arena")
 local Overlay = require("overlay")
 
 local Gamemodes = require("gamemodes")
-Gamemodes.init(Overlay, Profiler)
+Gamemodes.init(Overlay, Profiler, Possession)
 type CasterArena = Gamemodes.CasterArena
 type Arena3v3 = Gamemodes.Arena3v3
 type Arena4v4 = Gamemodes.Arena4v4
@@ -679,6 +679,9 @@ local awayGoalPotentialEnter: boolean = false
 local previousAwayGoalPotentialEnter: boolean = false
 
 local maximumTimeSincePass: number = 5
+local shotSeparationDistance: number = 30
+local shotDetected: boolean = false
+local currentShotPlayer: ReplayPlayer? = nil
 local previousContactCheckBallPosition: Vec3? = nil
 
 local goalPlayer: ReplayPlayer? = nil
@@ -2687,6 +2690,34 @@ function rotateCamera()
 	camera.rotation = gravityChaser * Quat.fromEuler(rotEuler.x, rotEuler.y, rotEuler.z)
 end
 
+function checkForPossessionChange(newTeam: string, newTeamIndex: number, newPlayer: ReplayPlayer)
+	if not selectedArena.isGameActive then
+		return
+	end
+
+	local previousTeam = getPossessionTeam()
+	if previousTeam == nil then
+		return
+	end
+
+	local previousTeamInfo = ballCollisionInfo[previousTeam]
+	if previousTeamInfo.current == nil then
+		return
+	end
+
+	local previousPlayer = previousTeamInfo.current.player
+
+	if previousTeam == newTeam then
+		Overlay.increaseStat(newTeamIndex, previousPlayer.playerName, "passes")
+		return
+	end
+
+	local losingTeamIndex = previousTeam == "home" and Util.TeamIndex.HomeTeam or Util.TeamIndex.AwayTeam
+
+	Overlay.increaseStat(newTeamIndex, newPlayer.playerName, "possessionsWon")
+	Overlay.increaseStat(losingTeamIndex, previousPlayer.playerName, "possessionsLost")
+end
+
 function checkBallContact()
 	local segmentStart = previousContactCheckBallPosition or ball.transform.position
 	local segmentEnd = ball.transform.position
@@ -2707,6 +2738,7 @@ function checkBallContact()
 			ballCollisionInfo.home.current.lastContactPlace = ball.transform.position
 			return
 		end
+		checkForPossessionChange("home", Util.TeamIndex.HomeTeam, contactPlayer)
 		ballCollisionInfo.home.previous = ballCollisionInfo.home.current
 		ballCollisionInfo.home.current = {
 			lastContactPlace = ball.transform.position,
@@ -2721,6 +2753,7 @@ function checkBallContact()
 			ballCollisionInfo.away.current.lastContactPlace = ball.transform.position
 			return
 		end
+		checkForPossessionChange("away", Util.TeamIndex.AwayTeam, contactPlayer)
 		ballCollisionInfo.away.previous = ballCollisionInfo.away.current
 		ballCollisionInfo.away.current = {
 			lastContactPlace = ball.transform.position,
@@ -2785,6 +2818,40 @@ function getAssistPlayer(team: string): ReplayPlayer?
 		return possessionTeam.previous.player
 	else
 		return nil
+	end
+end
+
+function checkForShot()
+	local possesionTeamString: string? = getPossessionTeam()
+
+	if not possesionTeamString then
+		return
+	end
+
+	local possessionTeam = ballCollisionInfo[possesionTeamString]
+
+	if possessionTeam.current == nil then
+		return
+	end
+
+	if possessionTeam.current.player ~= currentShotPlayer then
+		currentShotPlayer = possessionTeam.current.player
+		shotDetected = false
+	end
+
+	local separationDistance = Util.getDist(ball.transform.position, possessionTeam.current.lastContactPlace)
+	local isSeparated = separationDistance >= shotSeparationDistance
+
+	if not isSeparated or shotDetected then
+		return
+	end
+
+	if homeGoalPotentialEnter and possessionTeam.current.player.teamIndex == Util.TeamIndex.AwayTeam then
+		shotDetected = true
+		Overlay.increaseStat(Util.TeamIndex.AwayTeam, possessionTeam.current.player.playerName, "shots")
+	elseif awayGoalPotentialEnter and possessionTeam.current.player.teamIndex == Util.TeamIndex.HomeTeam then
+		shotDetected = true
+		Overlay.increaseStat(Util.TeamIndex.HomeTeam, possessionTeam.current.player.playerName, "shots")
 	end
 end
 
@@ -2942,6 +3009,8 @@ function checkPotentialStatChange(homeGoalBox: BoxType, awayGoalBox: BoxType)
 	end
 
 	checkBallContact()
+
+	checkForShot()
 
 	if checkForGoalPotential() then
 		earlyStatChangeReturn(false)

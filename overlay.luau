@@ -14,7 +14,12 @@ type Stats = {
 	goals: number,
 	saves: number,
 	assists: number,
+	shots: number,
+	passes: number,
 	possession: number,
+	possessionsWon: number,
+	possessionsLost: number,
+	dribbleMeters: number,
 }
 
 type OverlayPlayer = {
@@ -28,7 +33,12 @@ function newStats(): Stats
 		goals = 0,
 		saves = 0,
 		assists = 0,
+		shots = 0,
+		passes = 0,
 		possession = 0,
+		possessionsWon = 0,
+		possessionsLost = 0,
+		dribbleMeters = 0,
 	}
 end
 
@@ -122,8 +132,10 @@ function Overlay.setPossession(data: PossessionData)
 
 			if api.home.players[playerName] then
 				api.home.players[playerName].stats.possession = playerPossession * 100
+				api.home.players[playerName].stats.dribbleMeters = playerStats.dribbleMeters
 			elseif api.away.players[playerName] then
 				api.away.players[playerName].stats.possession = playerPossession * 100
+				api.away.players[playerName].stats.dribbleMeters = playerStats.dribbleMeters
 			end
 		end
 	else
@@ -234,11 +246,11 @@ function Overlay.increaseStat(teamIndex: number, playerName: string, stat: strin
 		return
 	end
 
-	if team.players[playerName][stat] == nil then
+	if team.players[playerName].stats[stat] == nil then
 		return
 	end
 
-	team.players[playerName][stat] += 1
+	team.players[playerName].stats[stat] += 1
 end
 
 function Overlay.setFollowedPlayer(followedPlayer: string)
