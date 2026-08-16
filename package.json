@@ -3,7 +3,7 @@
   "author": "Dennssen",
   "displayName": "Caster Camera",
   "name": "dennssen.caster",
-  "version": "2.7.0",
+  "version": "2.7.1",
   "description": "The Caster camera is a Driftball focused caster tool that let's you access everything from freecam, first person pov, third person pov, 3 different configurable overviews, a cool particle system for goal explosions, and MANY confgurable preferences.",
   "keywords": [
     "casting",
