@@ -2,6 +2,7 @@
 
 local Utils = require("util")
 local Possession = require("possession")
+local Boost = require("boost")
 
 local Overlay = {}
 
@@ -20,6 +21,7 @@ type Stats = {
 	possessionsWon: number,
 	possessionsLost: number,
 	dribbleMeters: number,
+	boost: number,
 }
 
 type OverlayPlayer = {
@@ -39,6 +41,7 @@ function newStats(): Stats
 		possessionsWon = 0,
 		possessionsLost = 0,
 		dribbleMeters = 0,
+		boost = 0,
 	}
 end
 
@@ -141,6 +144,20 @@ function Overlay.setPossession(data: PossessionData)
 	else
 		api.home.possession = 0
 		api.away.possession = 0
+	end
+end
+
+export type BoostData = { [number]: Boost.PlayerBoostStats }
+
+function Overlay.setBoost(data: BoostData)
+	for _, playerStats: Boost.PlayerBoostStats in data do
+		local playerName = playerStats.name
+
+		if api.home.players[playerName] then
+			api.home.players[playerName].stats.boost = playerStats.boostPercent
+		elseif api.away.players[playerName] then
+			api.away.players[playerName].stats.boost = playerStats.boostPercent
+		end
 	end
 end
 

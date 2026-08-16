@@ -5,6 +5,11 @@ type BoxType = typeof(Box)
 
 local Util = require("util")
 
+export type ArenaBoostPad = {
+	box: BoxType,
+	preset: string, -- "small" or "big"
+}
+
 export type ArenaTeam<T = {}> = {
 	teamIndex: number,
 	color: Color?,
@@ -38,6 +43,7 @@ export type Arena<ArenaData = {}, HomeData = {}, AwayData = {}> = {
 	transformOffset: Transform,
 	box: BoxType,
 	centerBox: BoxType,
+	boostPads: { ArenaBoostPad },
 	home: ArenaTeam<HomeData>,
 	away: ArenaTeam<AwayData>,
 	players: { ReplayPlayer },
@@ -106,6 +112,7 @@ function Arena.new(gamemode: ModuleStateSpectatorLuaApi, frameIndex: number): Ar
 	self.transformOffset = Transform.identity
 	self.transform = gamemode.transform
 	self.players = {}
+	self.boostPads = {}
 
 	self.home = {
 		teamIndex = Util.TeamIndex.HomeTeam,

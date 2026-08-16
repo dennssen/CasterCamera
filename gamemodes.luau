@@ -15,6 +15,24 @@ local debuging = {
 	bestOfAmount = 0,
 }
 
+export type BoostPadDef = {
+	position: Vec3,
+	preset: string, -- "small" or "big"
+}
+
+local DEFAULT_BOOST_PAD_SIZE = {
+	["small"] = Vec3.new(77, 77, 50),
+	["big"] = Vec3.new(120, 120, 100),
+}
+
+local function resolveBoostPadSize(preset: string): Vec3
+	local presets = config.boostPadPresets
+	if presets and presets[preset] then
+		return presets[preset]
+	end
+	return DEFAULT_BOOST_PAD_SIZE[preset] or Vec3.new(60, 60, 15)
+end
+
 export type OverviewData = {
 	overview: { { position: Vec3, rotation: Quat } },
 }
@@ -78,6 +96,7 @@ export type Arena3v3 = CasterArena & {
 	centerBoxOffset: Vec3,
 	goalBoxSize: Vec3,
 	goalPositionOffset: Vec3,
+	boostPadDefs: { BoostPadDef },
 }
 
 local Arena3v3 = {} :: Arena3v3
@@ -91,6 +110,7 @@ Arena3v3.boxOffset = Vec3.new(0, 0, 650)
 Arena3v3.centerBoxOffset = Vec3.new(0, 0, 300)
 Arena3v3.goalBoxSize = Vec3.new(150, 500, 225)
 Arena3v3.goalPositionOffset = Vec3.new(3250, 0, 175)
+Arena3v3.boostPadDefs = {} :: { BoostPadDef }
 
 function Arena3v3.new(gamemode: ModuleStateSpectatorLuaApi, frameIndex: number): Arena3v3
 	local self: CasterArena = setmetatable(CasterArena.new(gamemode, frameIndex), Arena3v3) :: any
@@ -137,6 +157,18 @@ function Arena3v3:setupDimensions()
 		box = Box.empty,
 	}
 	self.away.goal.box = Box.new(self.away.goal.position, Arena3v3.goalBoxSize, self.away.goal.rotation)
+
+	self.boostPads = {}
+	for _, def in Arena3v3.boostPadDefs do
+		table.insert(self.boostPads, {
+			box = Box.new(
+				self.transform.position + self.transform.rotation:rotateVector(def.position),
+				resolveBoostPadSize(def.preset),
+				self.transform.rotation
+			),
+			preset = def.preset,
+		})
+	end
 end
 
 function Arena3v3:setupOverviews()
@@ -181,6 +213,9 @@ function Arena3v3:GUIChangeDimensions()
 		print(`centerBoxOffset: {Arena3v3.centerBoxOffset}`)
 		print(`goalBoxSize: {Arena3v3.goalBoxSize}`)
 		print(`goalPositionOffset: {Arena3v3.goalPositionOffset}`)
+		for i, def in Arena3v3.boostPadDefs do
+			print(`boostPadDefs[{i}]: {def.preset} at {def.position}`)
+		end
 	end
 
 	self:setupDimensions()
@@ -198,6 +233,7 @@ export type Arena4v4 = CasterArena & {
 	centerBoxOffset: Vec3,
 	goalBoxSize: Vec3,
 	goalPositionOffset: Vec3,
+	boostPadDefs: { BoostPadDef },
 }
 
 local Arena4v4 = {} :: Arena4v4
@@ -211,6 +247,35 @@ Arena4v4.boxOffset = Vec3.new(0, 0, 685)
 Arena4v4.centerBoxOffset = Vec3.new(0, 0, 435)
 Arena4v4.goalBoxSize = Vec3.new(165, 450, 225)
 Arena4v4.goalPositionOffset = Vec3.new(4085, 0, 270)
+Arena4v4.boostPadDefs = {
+	{ position = Vec3.new(-1501, -3475, 180), preset = "big" },
+	{ position = Vec3.new(0, -3700, 170), preset = "small" },
+	{ position = Vec3.new(800, -2975, 139), preset = "small" },
+	{ position = Vec3.new(-800, -2975, 139), preset = "small" },
+	{ position = Vec3.new(1501, -3475, 180), preset = "big" },
+	{ position = Vec3.new(2400, -900, 417), preset = "small" },
+	{ position = Vec3.new(2400, 0, 417), preset = "small" },
+	{ position = Vec3.new(2400, 900, 417), preset = "small" },
+	{ position = Vec3.new(0, 500, 37), preset = "small" },
+	{ position = Vec3.new(0, 0, 150), preset = "small" },
+	{ position = Vec3.new(-500, 0, 37), preset = "small" },
+	{ position = Vec3.new(0, -500, 37), preset = "small" },
+	{ position = Vec3.new(500, 0, 37), preset = "small" },
+	{ position = Vec3.new(1330, 0, 550), preset = "small" },
+	{ position = Vec3.new(705, -660, 425), preset = "small" },
+	{ position = Vec3.new(-6, -1170, 698), preset = "small" },
+	{ position = Vec3.new(-1360, 0, 555), preset = "small" },
+	{ position = Vec3.new(-703, 656, 426), preset = "small" },
+	{ position = Vec3.new(-8, 1171, 697), preset = "small" },
+	{ position = Vec3.new(-1501, 3475, 180), preset = "big" },
+	{ position = Vec3.new(1501, 3475, 180), preset = "big" },
+	{ position = Vec3.new(0, 3700, 170), preset = "small" },
+	{ position = Vec3.new(800, 2975, 139), preset = "small" },
+	{ position = Vec3.new(-800, 2975, 139), preset = "small" },
+	{ position = Vec3.new(-2450, 0, 417), preset = "small" },
+	{ position = Vec3.new(-2450, 900, 417), preset = "small" },
+	{ position = Vec3.new(-2450, -900, 417), preset = "small" },
+} :: { BoostPadDef }
 
 function Arena4v4.new(gamemode: ModuleStateSpectatorLuaApi, frameIndex: number): Arena4v4
 	local self: Arena4v4 = setmetatable(Arena.new(gamemode, frameIndex), Arena4v4) :: any
@@ -268,6 +333,18 @@ function Arena4v4:setupDimensions()
 		box = Box.empty,
 	}
 	self.away.goal.box = Box.new(self.away.goal.position, Arena4v4.goalBoxSize, self.away.goal.rotation)
+
+	self.boostPads = {}
+	for _, def in Arena4v4.boostPadDefs do
+		table.insert(self.boostPads, {
+			box = Box.new(
+				self.transform.position + self.transform.rotation:rotateVector(def.position),
+				resolveBoostPadSize(def.preset),
+				self.transform.rotation
+			),
+			preset = def.preset,
+		})
+	end
 end
 
 function Arena4v4:setupOverviews()
@@ -312,6 +389,9 @@ function Arena4v4:GUIChangeDimensions()
 		print(`centerBoxOffset: {Arena4v4.centerBoxOffset}`)
 		print(`goalBoxSize: {Arena4v4.goalBoxSize}`)
 		print(`goalPositionOffset: {Arena4v4.goalPositionOffset}`)
+		for i, def in Arena4v4.boostPadDefs do
+			print(`boostPadDefs[{i}]: {def.preset} at {def.position}`)
+		end
 	end
 
 	self:setupDimensions()
@@ -329,6 +409,7 @@ export type Driftblitz = CasterArena & {
 	centerBoxOffset: Vec3,
 	goalBoxSize: Vec3,
 	goalPositionOffset: Vec3,
+	boostPadDefs: { BoostPadDef },
 }
 
 local Driftblitz = {} :: Driftblitz
@@ -342,6 +423,7 @@ Driftblitz.boxOffset = Vec3.new(0, 0, 740)
 Driftblitz.centerBoxOffset = Vec3.new(0, 0, 100)
 Driftblitz.goalBoxSize = Vec3.new(100, 890, 300)
 Driftblitz.goalPositionOffset = Vec3.new(5295, 0, 175)
+Driftblitz.boostPadDefs = {} :: { BoostPadDef }
 
 function Driftblitz.new(gamemode: ModuleStateSpectatorLuaApi, frameIndex: number): Driftblitz
 	local self: Driftblitz = setmetatable(Arena.new(gamemode, frameIndex), Driftblitz) :: any
@@ -388,6 +470,18 @@ function Driftblitz:setupDimensions()
 		box = Box.empty,
 	}
 	self.away.goal.box = Box.new(self.away.goal.position, Driftblitz.goalBoxSize, self.away.goal.rotation)
+
+	self.boostPads = {}
+	for _, def in Driftblitz.boostPadDefs do
+		table.insert(self.boostPads, {
+			box = Box.new(
+				self.transform.position + self.transform.rotation:rotateVector(def.position),
+				resolveBoostPadSize(def.preset),
+				self.transform.rotation
+			),
+			preset = def.preset,
+		})
+	end
 end
 
 function Driftblitz:setupOverviews()
@@ -437,6 +531,9 @@ function Driftblitz:GUIChangeDimensions()
 		print(`centerBoxOffset: {Driftblitz.centerBoxOffset}`)
 		print(`goalBoxSize: {Driftblitz.goalBoxSize}`)
 		print(`goalPositionOffset: {Driftblitz.goalPositionOffset}`)
+		for i, def in Driftblitz.boostPadDefs do
+			print(`boostPadDefs[{i}]: {def.preset} at {def.position}`)
+		end
 	end
 
 	self:setupDimensions()
@@ -454,6 +551,7 @@ export type ZDrift = CasterArena & {
 	centerBoxOffset: Vec3,
 	goalBoxSize: Vec3,
 	goalPositionOffset: Vec3,
+	boostPadDefs: { BoostPadDef },
 }
 
 local ZDrift = {} :: ZDrift
@@ -467,6 +565,7 @@ ZDrift.boxOffset = Vec3.new(0, 0, 880)
 ZDrift.centerBoxOffset = Vec3.new(0, 0, 500)
 ZDrift.goalBoxSize = Vec3.new(600, 600, 600)
 ZDrift.goalPositionOffset = Vec3.new(8200, 0, 585)
+ZDrift.boostPadDefs = {} :: { BoostPadDef }
 
 function ZDrift.new(gamemode: ModuleStateSpectatorLuaApi, frameIndex: number): ZDrift
 	local self: ZDrift = setmetatable(Arena.new(gamemode, frameIndex), ZDrift) :: any
@@ -513,6 +612,18 @@ function ZDrift:setupDimensions()
 		box = Box.empty,
 	}
 	self.away.goal.box = Box.new(self.away.goal.position, ZDrift.goalBoxSize, self.away.goal.rotation)
+
+	self.boostPads = {}
+	for _, def in ZDrift.boostPadDefs do
+		table.insert(self.boostPads, {
+			box = Box.new(
+				self.transform.position + self.transform.rotation:rotateVector(def.position),
+				resolveBoostPadSize(def.preset),
+				self.transform.rotation
+			),
+			preset = def.preset,
+		})
+	end
 end
 
 function ZDrift:setupOverviews()
@@ -557,6 +668,9 @@ function ZDrift:GUIChangeDimensions()
 		print(`centerBoxOffset: {ZDrift.centerBoxOffset}`)
 		print(`goalBoxSize: {ZDrift.goalBoxSize}`)
 		print(`goalPositionOffset: {ZDrift.goalPositionOffset}`)
+		for i, def in ZDrift.boostPadDefs do
+			print(`boostPadDefs[{i}]: {def.preset} at {def.position}`)
+		end
 	end
 
 	self:setupDimensions()
